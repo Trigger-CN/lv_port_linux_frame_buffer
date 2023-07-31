@@ -1,0 +1,90 @@
+From a7fff90249412a47540dcb94c637088bbc4301b4 Mon Sep 17 00:00:00 2001
+From: trigger-cn <759025229@qq.com>
+Date: Mon, 31 Jul 2023 18:02:58 +0800
+Subject: [PATCH] =?UTF-8?q?=F0=9F=94=A7Modified=20Support=20for=2016-bit?=
+ =?UTF-8?q?=20screen?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ display/fbdev.c | 21 ++++++++++++++++-----
+ 1 file changed, 16 insertions(+), 5 deletions(-)
+
+diff --git a/display/fbdev.c b/display/fbdev.c
+index fe8d2ff..25a2adc 100644
+--- a/display/fbdev.c
++++ b/display/fbdev.c
+@@ -73,7 +73,7 @@ static struct fb_var_screeninfo vinfo;
+ static struct fb_fix_screeninfo finfo;
+ #endif /* USE_BSD_FBDEV */
+ static char *fbp = 0;
+-static long int screensize = 0;
++static long int screenbuf_size = 0;
+ static int fbfd = 0;
+ 
+ /**********************
+@@ -145,10 +145,10 @@ void fbdev_init(void)
+     LV_LOG_INFO("%dx%d, %dbpp", vinfo.xres, vinfo.yres, vinfo.bits_per_pixel);
+ 
+     // Figure out the size of the screen in bytes
+-    screensize =  finfo.smem_len; //finfo.line_length * vinfo.yres;    
++    screenbuf_size =  finfo.smem_len; //finfo.line_length * vinfo.yres;    
+ 
+     // Map the device to memory
+-    fbp = (char *)mmap(0, screensize, PROT_READ | PROT_WRITE, MAP_SHARED, fbfd, 0);
++    fbp = (char *)mmap(0, screenbuf_size, PROT_READ | PROT_WRITE, MAP_SHARED, fbfd, 0);
+     if((intptr_t)fbp == -1) {
+         perror("Error: failed to map framebuffer device to memory");
+         return;
+@@ -183,13 +183,16 @@ void fbdev_flush(lv_disp_drv_t * drv, const lv_area_t * area, lv_color_t * color
+         return;
+     }
+ 
++    //LV_LOG_INFO("vinfo.xres %d,\n vinfo.yres %d,\n vinfo.bits_per_pixel %d,\n vinfo.xoffset %d,\n vinfo.yoffset %d,\n",
++    //vinfo.xres, vinfo.yres, vinfo.bits_per_pixel, vinfo.xoffset, vinfo.yoffset);
++
+     /*Truncate the area to the screen*/
+     int32_t act_x1 = area->x1 < 0 ? 0 : area->x1;
+     int32_t act_y1 = area->y1 < 0 ? 0 : area->y1;
+     int32_t act_x2 = area->x2 > (int32_t)vinfo.xres - 1 ? (int32_t)vinfo.xres - 1 : area->x2;
+     int32_t act_y2 = area->y2 > (int32_t)vinfo.yres - 1 ? (int32_t)vinfo.yres - 1 : area->y2;
+ 
+-
++    //LV_LOG_INFO(" \nact_x1 %d,\n act_y1 %d,\n act_x2 %d,\n act_y2 %d,\n",act_x1,act_y1,act_x2,act_y2);
+     lv_coord_t w = (act_x2 - act_x1 + 1);
+     long int location = 0;
+     long int byte_location = 0;
+@@ -197,6 +200,7 @@ void fbdev_flush(lv_disp_drv_t * drv, const lv_area_t * area, lv_color_t * color
+ 
+     /*32 or 24 bit per pixel*/
+     if(vinfo.bits_per_pixel == 32 || vinfo.bits_per_pixel == 24) {
++        LV_LOG_USER("32 or 24 bit per pixel");
+         uint32_t * fbp32 = (uint32_t *)fbp;
+         int32_t y;
+         for(y = act_y1; y <= act_y2; y++) {
+@@ -207,13 +211,20 @@ void fbdev_flush(lv_disp_drv_t * drv, const lv_area_t * area, lv_color_t * color
+     }
+     /*16 bit per pixel*/
+     else if(vinfo.bits_per_pixel == 16) {
++        LV_LOG_USER("16 bit per pixel");
+         uint16_t * fbp16 = (uint16_t *)fbp;
+         int32_t y;
+         for(y = act_y1; y <= act_y2; y++) {
+             location = (act_x1 + vinfo.xoffset) + (y + vinfo.yoffset) * finfo.line_length / 2;
+-            memcpy(&fbp16[location], (uint32_t *)color_p, (act_x2 - act_x1 + 1) * 2);
++            memcpy(&fbp16[location], (uint16_t *)color_p, (act_x2 - act_x1 + 1) * 2);
+             color_p += w;
+         }
++
++        //memcpy(fbp, color_p, screenbuf_size);
++
++        // for (size_t i = 0; i < screenbuf_size; i+=2) {
++        //     *((uint16_t*)fbp  + i) = *(uint16_t*)color_p+i/2;
++        // }
+     }
+     /*8 bit per pixel*/
+     else if(vinfo.bits_per_pixel == 8) {
+-- 
+2.20.1
+
